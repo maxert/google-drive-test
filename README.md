@@ -35,7 +35,7 @@ cd your-repository
 ### 2. Встановлення залежностей
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### 3. Конфігурація
@@ -84,15 +84,15 @@ GET /files
 ### Генерація міграцій
 
 ```bash
-pnpm run build
-pnpm exec typeorm migration:generate -d dist/config/ormconfig.js src/database/YourMigrationName
+npm run build
+npm exec typeorm migration:generate -d dist/config/ormconfig.js src/database/YourMigrationName
 ```
 
 ### Запуск міграцій
 
 ```bash
-pnpm run build
-pnpm exec typeorm migration:run -d dist/config/ormconfig.js
+npm run build
+npm exec typeorm migration:run -d dist/config/ormconfig.js
 ```
 
 ## 🔄 CI/CD Workflow
