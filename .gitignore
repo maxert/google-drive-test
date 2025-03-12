@@ -1,0 +1,22 @@
+# Node.js dependencies
+node_modules
+dist
+
+# Environment variables
+.env.local
+.env
+
+# Google secrets
+client_secret.json
+
+# IDE / Editor files
+.idea
+.vscode
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
