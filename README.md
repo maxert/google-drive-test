@@ -85,14 +85,14 @@ GET /files
 
 ```bash
 npm run build
-npm exec typeorm migration:generate -d dist/config/ormconfig.js src/database/YourMigrationName
+npm run typeorm migration:generate -d dist/config/ormconfig.js src/database/YourMigrationName
 ```
 
 ### Запуск міграцій
 
 ```bash
 npm run build
-npm exec typeorm migration:run -d dist/config/ormconfig.js
+npm run typeorm migration:run -d dist/config/ormconfig.js
 ```
 
 ## 🔄 CI/CD Workflow
