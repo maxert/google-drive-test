@@ -1,45 +1,28 @@
-import {Injectable, Logger, ConflictException, HttpStatus} from '@nestjs/common';
-import {InjectRepository} from '@nestjs/typeorm';
-import {Repository} from 'typeorm';
-import {google, drive_v3} from 'googleapis';
-import axios, {AxiosResponse} from 'axios';
-import {UploadedFile} from './entities/uploaded-file.entity';
-import * as path from 'path';
-import {Readable} from 'stream';
-import {GaxiosResponse, GoogleAuth} from 'googleapis-common';
+import {InjectRepository} from "@nestjs/typeorm";
+import {ConflictException, HttpStatus, Injectable, Logger} from "@nestjs/common";
+import {Repository} from "typeorm";
+import {UploadedFile} from "./entities/uploaded-file.entity";
+import {GoogleDriveService} from "../google-drive/google-drive.service";
+import {FileDownloader} from "./file-downloader.service";
+import {Readable} from "stream";
+import {CreateUploadedFileDto} from "./dto/create-uploaded-file.dto";
 
 @Injectable()
 export class FilesService {
-    private driveClient: drive_v3.Drive;
     private readonly logger: Logger = new Logger(FilesService.name);
 
     constructor(
-        @InjectRepository(UploadedFile)
-        private fileRepository: Repository<UploadedFile>,
+        @InjectRepository(UploadedFile) private fileRepository: Repository<UploadedFile>,
+        private googleDriveService: GoogleDriveService,
+        private fileDownloader: FileDownloader,
     ) {
-        const keyFilePath = path.join(process.cwd(), 'client_secret.json');
-
-        const auth: GoogleAuth = new google.auth.GoogleAuth({
-            keyFile: keyFilePath,
-            scopes: ['https://www.googleapis.com/auth/drive'],
-        });
-
-        auth.getClient()
-            .then(() => this.logger.log('✅ Successfully connected to Google Drive API'))
-            .catch((error) => {
-                this.logger.error('❌ Google Drive authentication error:', error);
-            });
-
-        this.driveClient = google.drive({version: 'v3', auth});
     }
 
     private extractFileName(url: string): string {
         try {
-            const parsedUrl = new URL(url);
-            const fileName = path.basename(parsedUrl.pathname);
-            return fileName || 'unknown';
+            return new URL(url).pathname.split('/').pop() || 'unknown';
         } catch (error) {
-            this.logger.error(`Ошибка парсинга URL: ${url}`, error);
+            this.logger.error(`Error parsing URL: ${url}`, error);
             return 'unknown';
         }
     }
@@ -50,53 +33,56 @@ export class FilesService {
 
         for (const url of urls) {
             try {
-                const fileName: string = this.extractFileName(url);
+                const fileName = this.extractFileName(url);
 
                 const existingFile = await this.fileRepository.findOne({where: {filename: fileName}});
                 if (existingFile) {
-                    this.logger.error(`File "${fileName}" already exists in the database.`);
+                    this.logger.warn(`File "${fileName}" already exists in the database.`);
                     failedUploads.push(url);
                     continue;
                 }
 
+                const fileStream: Readable = await this.fileDownloader.download(url);
 
-                const response: AxiosResponse<Readable> = await axios.get(url, {responseType: 'stream'});
-                const fileMetadata: drive_v3.Schema$File = {name: fileName};
+                const uploadedFile = await this.googleDriveService.uploadFile(fileStream, fileName);
 
-                const uploadedFile: GaxiosResponse<drive_v3.Schema$File> = await this.driveClient.files.create({
-                    requestBody: fileMetadata,
-                    media: {body: response.data},
-                    fields: 'id,webViewLink,webContentLink',
-                });
-
-
-                const file: UploadedFile = this.fileRepository.create({
+                const file = await this.createUploadedFile({
                     filename: fileName,
-                    driveFileId: uploadedFile.data.id!,
-                    webViewLink: uploadedFile.data.webViewLink!,
-                    webContentLink: uploadedFile.data.webContentLink!,
+                    driveFileId: uploadedFile.id,
+                    webViewLink: uploadedFile.webViewLink,
+                    webContentLink: uploadedFile.webContentLink,
                 });
 
-                await this.fileRepository.save(file);
                 successfulFiles.push(file);
             } catch (error) {
-                this.logger.error(`Failed to upload file from URL ${url}`, error);
+                this.logger.error(`Failed to upload file from URL: ${url}`, error);
                 failedUploads.push(url);
             }
         }
 
         if (failedUploads.length > 0) {
-            this.logger.warn(`Uploaded ${successfulFiles.length} out of ${urls.length} files`);
             throw new ConflictException({
                 statusCode: HttpStatus.CONFLICT,
-                message: `Some files failed to upload.`,
+                message: 'Some files failed to upload.',
                 failedUploads,
                 successfulFiles,
             });
         }
 
-        this.logger.log('All files were uploaded successfully');
+        this.logger.log(`Successfully uploaded ${successfulFiles.length} files.`);
+
         return successfulFiles;
+    }
+
+    async createUploadedFile({
+                                 filename,
+                                 driveFileId,
+                                 webViewLink,
+                                 webContentLink,
+                             }: CreateUploadedFileDto): Promise<UploadedFile> {
+        const file = this.fileRepository.create({filename, driveFileId, webViewLink, webContentLink});
+        await this.fileRepository.save(file);
+        return file;
     }
 
     async getAllFiles(): Promise<UploadedFile[]> {

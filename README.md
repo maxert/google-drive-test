@@ -110,6 +110,8 @@ project-root
 │   ├── modules
 │   │   ├── auth
 │   │   └── files
+│   │   └── google-drive
+│   ├── config
 │   ├── app.module.ts
 │   └── main.ts
 ├── database

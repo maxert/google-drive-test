@@ -6,6 +6,7 @@ import {ThrottlerModule} from "@nestjs/throttler";
 import {FilesModule} from "./files/files.module";
 import { AuthModule } from './auth/auth.module';
 import typeorm, {typeOrmConfig} from './config/ormconfig';
+import { GoogleDriveModule } from './google-drive/google-drive.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import typeorm, {typeOrmConfig} from './config/ormconfig';
     ThrottlerModule.forRoot([{ ttl: 60, limit: 20 }]),
     FilesModule,
     AuthModule,
+    GoogleDriveModule,
   ],
 })
 export class AppModule {}
