@@ -105,23 +105,31 @@ CI/CD налаштовано через **GitHub Actions**:
 ## 📂 Структура проєкту
 
 ```
-project-root
-├── src
-│   ├── modules
-│   │   ├── auth
-│   │   └── files
-│   │   └── google-drive
-│   ├── config
-│   ├── app.module.ts
-│   └── main.ts
-├── database
-│   └*-migrations.ts
-├── ormconfig.ts
-├── Dockerfile
+nestjs-app
 ├── docker-compose.yml
+├── package.json
+├── tsconfig.json
 ├── .env
-├── .env.local
-├── client_secret.json
-└── package.json
+├── src
+│   ├── app.module.ts
+│   ├── main.ts
+│   ├── google-drive
+│   │   ├── google-drive.module.ts
+│   │   ├── google-drive.interface.ts
+│   │   └── google-drive.service.ts
+│   ├── files
+│   │   ├── files.module.ts
+│   │   ├── files.controller.ts
+│   │   ├── files.service.ts
+│   │   ├── files.processor.ts
+│   │   ├── repository
+│   │   │   ├── IFilesRepository.ts
+│   │   │   └── files.repository.ts
+│   │   ├── entities
+│   │   │   └── file.entity.ts
+│   │   └── dto
+│   │       ├── create-file.dto.ts
+│   │       └── file-response.dto.ts
+└── ...
 ```
 
