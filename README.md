@@ -66,7 +66,7 @@ docker-compose up -d --build
 ### 🔼 Завантаження файлів
 
 ```http
-POST /files/upload
+POST /files
 
 {
   "urls": ["https://example.com/file.pdf"]
