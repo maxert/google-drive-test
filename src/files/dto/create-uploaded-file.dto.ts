@@ -1,6 +1,7 @@
+import { IsArray, IsString } from 'class-validator';
+
 export class CreateUploadedFileDto {
-    filename: string;
-    driveFileId: string;
-    webViewLink: string;
-    webContentLink: string;
+    @IsArray()
+    @IsString({ each: true })
+    urls: string[];
 }

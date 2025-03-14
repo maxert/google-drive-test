@@ -55,8 +55,38 @@ jobs:
           docker logs postgres || true
           exit 1
 
+      - name: Run Redis Container
+        run: |
+          docker run -d \
+            --name redis \
+            -p 6379:6379 \
+            redis:latest
+
+      - name: Wait for Redis to be Ready
+        run: |
+          echo "Waiting for Redis to be ready..."
+          for i in {1..30}; do
+            # Якщо Redis готовий, redis-cli ping поверне "PONG"
+            if docker exec redis redis-cli ping | grep "PONG"; then
+              echo "✅ Redis is ready!"
+              exit 0
+            fi
+            echo "Still waiting..."
+            sleep 2
+          done
+          echo "❌ Redis did not become ready in time. Logs:"
+          docker logs redis || true
+          exit 1
+
       - name: Shutdown PostgreSQL
-        run: docker stop postgres && docker rm postgres
+        run: |
+          docker stop postgres
+          docker rm postgres
+
+      - name: Shutdown Redis
+        run: |
+          docker stop redis
+          docker rm redis
 
       - name: Stop Docker Service
         run: sudo systemctl stop docker

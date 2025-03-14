@@ -1,91 +1,65 @@
-import {InjectRepository} from "@nestjs/typeorm";
-import {ConflictException, HttpStatus, Injectable, Logger} from "@nestjs/common";
-import {Repository} from "typeorm";
-import {UploadedFile} from "./entities/uploaded-file.entity";
-import {GoogleDriveService} from "../google-drive/google-drive.service";
-import {FileDownloader} from "./file-downloader.service";
-import {Readable} from "stream";
-import {CreateUploadedFileDto} from "./dto/create-uploaded-file.dto";
+import {Injectable, Inject} from '@nestjs/common';
+import {Queue} from 'bull';
+import {InjectQueue} from '@nestjs/bull';
+import {IFilesRepository} from "./repository/IFilesRepository";
+import {FileEntity, FileStatus} from "./entities/file.entity";
+
 
 @Injectable()
 export class FilesService {
-    private readonly logger: Logger = new Logger(FilesService.name);
-
     constructor(
-        @InjectRepository(UploadedFile) private fileRepository: Repository<UploadedFile>,
-        private googleDriveService: GoogleDriveService,
-        private fileDownloader: FileDownloader,
+        @Inject('IFilesRepository')
+        private readonly filesRepository: IFilesRepository,
+        @InjectQueue('files')
+        private readonly filesQueue: Queue,
     ) {
     }
 
-    private extractFileName(url: string): string {
-        try {
-            return new URL(url).pathname.split('/').pop() || 'unknown';
-        } catch (error) {
-            this.logger.error(`Error parsing URL: ${url}`, error);
-            return 'unknown';
-        }
-    }
-
-    async uploadFiles(urls: string[]): Promise<UploadedFile[]> {
-        const successfulFiles: UploadedFile[] = [];
-        const failedUploads: string[] = [];
+    async createUploadTasks(urls: string[]): Promise<FileEntity[]> {
+        const result: FileEntity[] = [];
+        const {PENDING, UPLOADING} = FileStatus;
 
         for (const url of urls) {
-            try {
-                const fileName = this.extractFileName(url);
+            const existing = await this.filesRepository.findByOriginalUrl(url);
 
-                const existingFile = await this.fileRepository.findOne({where: {filename: fileName}});
-                if (existingFile) {
-                    this.logger.warn(`File "${fileName}" already exists in the database.`);
-                    failedUploads.push(url);
-                    continue;
-                }
-
-                const fileStream: Readable = await this.fileDownloader.download(url);
-
-                const uploadedFile = await this.googleDriveService.uploadFile(fileStream, fileName);
-
-                const file = await this.createUploadedFile({
-                    filename: fileName,
-                    driveFileId: uploadedFile.id,
-                    webViewLink: uploadedFile.webViewLink,
-                    webContentLink: uploadedFile.webContentLink,
-                });
-
-                successfulFiles.push(file);
-            } catch (error) {
-                this.logger.error(`Failed to upload file from URL: ${url}`, error);
-                failedUploads.push(url);
+            if (existing) {
+                console.log(`File with URL '${url}' already exists (ID: ${existing.id})`);
+                result.push(existing);
+                continue;
             }
-        }
 
-        if (failedUploads.length > 0) {
-            throw new ConflictException({
-                statusCode: HttpStatus.CONFLICT,
-                message: 'Some files failed to upload.',
-                failedUploads,
-                successfulFiles,
+            const file = new FileEntity();
+            file.originalUrl = url;
+            file.status = PENDING;
+
+            const [created] = await this.filesRepository.save([file]);
+            result.push(created);
+
+            await this.filesQueue.add("upload", {
+                fileId: created.id,
+                fileUrl: created.originalUrl,
             });
         }
 
-        this.logger.log(`Successfully uploaded ${successfulFiles.length} files.`);
-
-        return successfulFiles;
+        return result;
     }
 
-    async createUploadedFile({
-                                 filename,
-                                 driveFileId,
-                                 webViewLink,
-                                 webContentLink,
-                             }: CreateUploadedFileDto): Promise<UploadedFile> {
-        const file = this.fileRepository.create({filename, driveFileId, webViewLink, webContentLink});
-        await this.fileRepository.save(file);
-        return file;
+    async findAll(): Promise<FileEntity[]> {
+        return this.filesRepository.find();
     }
 
-    async getAllFiles(): Promise<UploadedFile[]> {
-        return this.fileRepository.find();
+    async setStatusUploading(fileId: number): Promise<void> {
+        await this.filesRepository.update(fileId, {status: FileStatus.UPLOADING});
+    }
+
+    async setStatusDone(fileId: number, driveLink: string): Promise<void> {
+        await this.filesRepository.update(fileId, {
+            status: FileStatus.DONE,
+            driveLink,
+        });
+    }
+
+    async setStatusError(fileId: number): Promise<void> {
+        await this.filesRepository.update(fileId, {status: FileStatus.ERROR});
     }
 }
